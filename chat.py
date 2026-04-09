@@ -4,7 +4,7 @@ import random
 from telebot import types
 from datetime import date, timedelta
 
-API_TOKEN = '8740586204:AAGPGB9L9hegac3Kz0kX_bWlshHruBoAB1I'
+API_TOKEN = '8740586204:AAFtQs2e-zKECfw8xJ5vIEODnx3nU26VYR0'
 bot = telebot.TeleBot(API_TOKEN)
 
 # Hangman game states
