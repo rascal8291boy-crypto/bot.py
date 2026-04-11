@@ -5,7 +5,7 @@ import time  # mute ke liye
 from telebot import types
 from datetime import date, timedelta
 
-API_TOKEN = '8740586204:AAFtQs2e-zKECfw8xJ5vIEODnx3nU26VYR0'
+API_TOKEN = '8659286479:AAHP8cAK-QgkzqVUylhDc5BgRIUnn245hX8'
 bot = telebot.TeleBot(API_TOKEN)
 
 # Hangman game states
