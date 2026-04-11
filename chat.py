@@ -466,7 +466,7 @@ def start_hangman(message):
         "word": word,
         "guessed": set(),
         "wrong": 0,
-        "current": ["_" if c.isalpha() elsec for c in word]
+        "current": ["_" if c.isalpha() else c for c in word]
     }
     text = "🕹️ **HANGMAN STARTED!** 🕹️\n\nGuess the fruit:\n" + " ".join(hangman_games[chat_id]["current"]) + "\n\nSend one letter (example: a)"
     bot.reply_to(message, text)
