@@ -34,6 +34,12 @@ def init_db():
                   date TEXT NOT NULL,
                   message_count INTEGER DEFAULT 0,
                   PRIMARY KEY (user_id, chat_id, date))''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS security_settings 
+                 (chat_id INTEGER PRIMARY KEY, enabled INTEGER DEFAULT 0)''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS groups 
+                 (chat_id INTEGER PRIMARY KEY, title TEXT)''')
     conn.commit()
     conn.close()
 
@@ -105,11 +111,219 @@ def security_command(message):
     
     security_enabled[chat_id] = not security_enabled[chat_id]
     status = "✅ ENABLED" if security_enabled[chat_id] else "❌ DISABLED"
+
+    conn = sqlite3.connect('ranking.db')
+    c = conn.cursor()
+    enabled_val = 1 if security_enabled[chat_id] else 0
+    c.execute("INSERT OR REPLACE INTO security_settings (chat_id, enabled) VALUES (?, ?)", (chat_id, enabled_val))
+    conn.commit()
+    conn.close()
     
     bot.reply_to(message, f"🔒 **GROUP SECURITY MODE:** {status}\n\n"
                          f"Blocked words: tos breaking word\n"
                          f"Bot {'Only tos breaking messages will be deleted ' if security_enabled[chat_id] else 'nothing'}.\n\n"
                          f"Note: Grant the bot 'Delete Messages' and 'Restrict Members' permissions to enable all features.")
+
+# ====================== TOP GROUPS FUNCTION ======================
+def get_top_groups(period="today"):
+    conn = sqlite3.connect('ranking.db')
+    c = conn.cursor()
+    today_str = date.today().isoformat()
+    
+    if period == "today":
+        date_filter = "dm.date = ?"
+        params = (today_str,)
+        total_query = "SELECT COALESCE(SUM(message_count), 0) FROM daily_messages WHERE date = ?"
+        total_params = (today_str,)
+    elif period == "week":
+        start_date = (date.today() - timedelta(days=6)).isoformat()
+        date_filter = "dm.date >= ?"
+        params = (start_date,)
+        total_query = "SELECT COALESCE(SUM(message_count), 0) FROM daily_messages WHERE date >= ?"
+        total_params = (start_date,)
+    else:  # overall
+        date_filter = "1=1"
+        params = ()
+        total_query = "SELECT COALESCE(SUM(message_count), 0) FROM daily_messages"
+        total_params = ()
+    
+    c.execute(f"""
+        SELECT g.chat_id, g.title, SUM(dm.message_count) as total
+        FROM daily_messages dm
+        JOIN groups g ON dm.chat_id = g.chat_id
+        WHERE {date_filter}
+        GROUP BY g.chat_id, g.title
+        ORDER BY total DESC
+        LIMIT 10
+    """, params)
+    stats = c.fetchall()
+    
+    c.execute(total_query, total_params)
+    total_msgs = c.fetchone()[0] or 0
+    
+    conn.close()
+    return stats, total_msgs
+
+# ====================== TOPGROUPS COMMAND ======================
+@bot.message_handler(commands=['topgroups'])
+def show_topgroups(message):
+    stats, total_msgs = get_top_groups("today")
+    
+    if not stats:
+        caption = "**MANIPULATER RANKING BOT**\n**GLOBAL GROUPS LEADERBOARD** 👥\n\n❌ No messages yet today!\nStart sending messages 🔥\n\n━━━━━━━━━━━━━━━━━━━━"
+    else:
+        text = "**TOP GROUPS today** 🌍\n\n"
+        for i, (chat_id, title, msgs) in enumerate(stats, 1):
+            text += f"{i}. **{title}** • `{msgs}` messages\n"
+        text += f"\n📊 **Today messages:** `{total_msgs}`\n━━━━━━━━━━━━━━━━━━━━"
+        caption = f"**MANIPULATER RANKING BOT**\n**GLOBAL GROUPS LEADERBOARD** 👥\n\n{text}"
+    
+    markup = types.InlineKeyboardMarkup(row_width=3)
+    markup.add(
+        types.InlineKeyboardButton("📅 Today", callback_data="topgroups_today"),
+        types.InlineKeyboardButton("📆 Week", callback_data="topgroups_week"),
+  types.InlineKeyboardButton("🌍 Overall", callback_data="topgroups_overall")
+    )
+    
+    try:
+        bot.send_photo(message.chat.id, photo=LEADERBOARD_BANNER, caption=caption, parse_mode='Markdown', reply_markup=markup)
+    except:
+        bot.reply_to(message, caption, parse_mode='Markdown', reply_markup=markup)
+
+def show_topgroups_data(call, period):
+    stats, total_msgs = get_top_groups(period)
+    
+    if not stats:
+        text = "❌ No messages yet!\n"
+    else:
+        period_text = "today" if period == "today" else "this week" if period == "week" else "overall"
+        text = f"**TOP GROUPS {period_text}** 🌍\n\n"
+        for i, (chat_id, title, msgs) in enumerate(stats, 1):
+            text += f"{i}. **{title}** • `{msgs}` messages\n"
+        
+        total_label = "Today messages" if period == "today" else "This week messages" if period == "week" else "Total messages ever"
+        text += f"\n📊 **{total_label}:** `{total_msgs}`\n━━━━━━━━━━━━━━━━━━━━"
+    
+    caption = f"**MANIPULATER RANKING BOT**\n**GLOBAL GROUPS LEADERBOARD** 👥\n\n{text}"
+    
+    markup = types.InlineKeyboardMarkup(row_width=3)
+    markup.add(
+        types.InlineKeyboardButton("📅 Today", callback_data="topgroups_today"),
+        types.InlineKeyboardButton("📆 Week", callback_data="topgroups_week"),
+        types.InlineKeyboardButton("🌍 Overall", callback_data="topgroups_overall")
+    )
+    
+    try:
+        bot.edit_message_caption(call.message.chat.id, call.message.message_id, caption=caption, parse_mode='Markdown', reply_markup=markup)
+    except:
+        bot.edit_message_text(caption, call.message.chat.id, call.message.message_id, parse_mode='Markdown', reply_markup=markup)
+
+# ====================== TOP USERS FUNCTION (naya global top users) ======================
+def get_top_users(period="overall"):
+    conn = sqlite3.connect('ranking.db')
+    c = conn.cursor()
+    today_str = date.today().isoformat()
+    
+    if period == "today":
+        c.execute("""
+            SELECT u.user_id, u.name, SUM(dm.message_count) as total
+            FROM daily_messages dm
+            JOIN users u ON dm.user_id = u.user_id
+            WHERE dm.date = ?
+            GROUP BY u.user_id, u.name
+            ORDER BY total DESC
+            LIMIT 10
+        """, (today_str,))
+        stats = c.fetchall()
+        total_query = "SELECT COALESCE(SUM(message_count), 0) FROM daily_messages WHERE date = ?"
+        total_params = (today_str,)
+    elif period == "week":
+        start_date = (date.today() - timedelta(days=6)).isoformat()
+        c.execute("""
+            SELECT u.user_id, u.name, SUM(dm.message_count) as total
+            FROM daily_messages dm
+            JOIN users u ON dm.user_id = u.user_id
+            WHERE dm.date >= ?
+            GROUP BY u.user_id, u.name
+            ORDER BY total DESC
+            LIMIT 10
+        """, (start_date,))
+        stats = c.fetchall()
+        total_query = "SELECT COALESCE(SUM(message_count), 0) FROM daily_messages WHERE date >= ?"
+        total_params = (start_date,)
+    else:  # overall (global)
+        c.execute("""
+            SELECT u.user_id, u.name, SUM(dm.message_count) as total
+            FROM daily_messages dm
+            JOIN users u ON dm.user_id = u.user_id
+            GROUP BY u.user_id, u.name
+            ORDER BY total DESC
+            LIMIT 10
+        """)
+        stats = c.fetchall()
+        total_query = "SELECT COALESCE(SUM(message_count), 0) FROM daily_messages"
+        total_params = ()
+    
+    c.execute(total_query, total_params)
+    total_msgs = c.fetchone()[0] or 0
+    conn.close()
+    return stats, total_msgs
+
+# ====================== TOPUSERS COMMAND ======================
+@bot.message_handler(commands=['topusers'])
+def show_topusers(message):
+    stats, total_msgs = get_top_users("overall")
+    
+    if not stats:
+        caption = "**MANIPULATER RANKING BOT**\n**GLOBAL USERS LEADERBOARD** 🌍\n\n❌ No messages yet!\nStart sending messages 🔥\n\n━━━━━━━━━━━━━━━━━━━━"
+    else:
+        text = "**GLOBAL LEADERBOARD** 🌍\n\n"
+        for i, (user_id, name, msgs) in enumerate(stats, 1):
+            clickable = f"[{name}](tg://user?id={user_id})"
+            text += f"{i}. {clickable} • `{msgs}` messages\n"
+        text += f"\n📊 **Total messages:** `{total_msgs}`\n━━━━━━━━━━━━━━━━━━━━"
+        caption = f"**MANIPULATER RANKING BOT**\n**GLOBAL USERS LEADERBOARD** 🌍\n\n{text}"
+    
+    markup = types.InlineKeyboardMarkup(row_width=3)
+    markup.add(
+        types.InlineKeyboardButton("📅 Today", callback_data="topusers_today"),
+        types.InlineKeyboardButton("📆 Week", callback_data="topusers_week"),
+        types.InlineKeyboardButton("🌍 Overall", callback_data="topusers_overall")
+    )
+    
+    try:
+        bot.send_photo(message.chat.id, photo=LEADERBOARD_BANNER, caption=caption, parse_mode='Markdown', reply_markup=markup)
+    except:
+        bot.reply_to(message, caption, parse_mode='Markdown', reply_markup=markup)
+
+def show_topusers_data(call, period):
+    stats, total_msgs = get_top_users(period)
+    
+    if not stats:
+        text = "❌ No messages yet!\n"
+    else:
+        period_text = "today" if period == "today" else "this week" if period == "week" else "overall"
+        text = f"**GLOBAL LEADERBOARD {period_text.upper()}** 🌍\n\n"
+        for i, (user_id, name, msgs) in enumerate(stats, 1):
+            clickable = f"[{name}](tg://user?id={user_id})"
+            text += f"{i}. {clickable} • `{msgs}` messages\n"
+        
+        total_label = "Today messages" if period == "today" else "This week messages" if period == "week" else "Total messages ever"
+        text += f"\n📊 **{total_label}:** `{total_msgs}`\n━━━━━━━━━━━━━━━━━━━━"
+    
+    caption = f"**MANIPULATER RANKING BOT**\n**GLOBAL USERS LEADERBOARD** 🌍\n\n{text}"
+    
+    markup = types.InlineKeyboardMarkup(row_width=3)
+    markup.add(
+        types.InlineKeyboardButton("📅 Today", callback_data="topusers_today"),
+        types.InlineKeyboardButton("📆 Week", callback_data="topusers_week"),
+        types.InlineKeyboardButton("🌍 Overall", callback_data="topusers_overall")
+    )
+    
+    try:
+        bot.edit_message_caption(call.message.chat.id, call.message.message_id, caption=caption, parse_mode='Markdown', reply_markup=markup)
+    except:
+        bot.edit_message_text(caption, call.message.chat.id, call.message.message_id, parse_mode='Markdown', reply_markup=markup)
 
 # ====================== MESSAGE STATS ======================
 def get_message_stats(chat_id, period="today"):
@@ -147,7 +361,6 @@ def make_clickable_name(user_id, name):
 # ====================== PROFILE COMMAND ======================
 @bot.message_handler(commands=['profile', 'stats', 'rank'])
 def show_profile(message):
-    # (same as before - no changes)
     user_id = message.from_user.id
     name = message.from_user.first_name
 
@@ -211,7 +424,7 @@ def show_profile(message):
     except:
         bot.reply_to(message, text, parse_mode='Markdown')
 
-# ====================== RANKINGS & OTHER COMMANDS (same as before) ======================
+# ====================== RANKINGS ======================
 @bot.message_handler(commands=['rankings'])
 def show_rankings(message):
     if message.chat.type not in ['group', 'supergroup']:
@@ -234,15 +447,14 @@ def show_rankings(message):
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
         types.InlineKeyboardButton("📅 Today", callback_data="ranking_today"),
-        types.InlineKeyboardButton("📆 Week", callback_data="ranking_lastweek")
-    )
+        types.InlineKeyboardButton("📆 Week", callback_data="ranking_lastweek"),
+  types.InlineKeyboardButton("🌍 Overall", callback_data="topgroups_overall")
+     )
 
     try:
         bot.send_photo(chat_id, photo=LEADERBOARD_BANNER, caption=caption, parse_mode='Markdown', reply_markup=markup)
     except:
         bot.reply_to(message, caption, parse_mode='Markdown')
-
-# (baaki sab functions same rakhe hain - show_ranking_data, hangman, settings, callback_query)
 
 @bot.message_handler(commands=['hangman'])
 def start_hangman(message):
@@ -254,7 +466,7 @@ def start_hangman(message):
         "word": word,
         "guessed": set(),
         "wrong": 0,
-        "current": ["_" if c.isalpha() else c for c in word]
+        "current": ["_" if c.isalpha() elsec for c in word]
     }
     text = "🕹️ **HANGMAN STARTED!** 🕹️\n\nGuess the fruit:\n" + " ".join(hangman_games[chat_id]["current"]) + "\n\nSend one letter (example: a)"
     bot.reply_to(message, text)
@@ -288,19 +500,50 @@ def callback_query(call, is_cmd=False, msg=None):
     elif call and call.data in ["ranking_today", "ranking_lastweek"]:
         period = "today" if call.data == "ranking_today" else "lastweek"
         show_ranking_data(call, period)
+    
+    elif call and call.data in ["topgroups_today", "topgroups_week", "topgroups_overall"]:
+        period = "today" if call.data == "topgroups_today" else "week" if call.data == "topgroups_week" else "overall"
+        show_topgroups_data(call, period)
+    
+    # Naya topusers callback
+    elif call and call.data in ["topusers_today", "topusers_week", "topusers_overall"]:
+        period = "today" if call.data == "topusers_today" else "week" if call.data == "topusers_week" else "overall"
+        show_topusers_data(call, period)
 
-# ====================== MAIN MESSAGE HANDLER (with SECURITY) ======================
+# ====================== MAIN MESSAGE HANDLER ======================
 @bot.message_handler(func=lambda message: True)
 def handle_all_messages(message):
     chat_id = message.chat.id
+    
+    # Group title update
+    if message.chat.type in ['group', 'supergroup']:
+        try:
+            conn = sqlite3.connect('ranking.db')
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO groups (chat_id, title) VALUES (?, ?)", 
+                      (chat_id, message.chat.title or f"Group {chat_id}"))
+            conn.commit()
+            conn.close()
+        except:
+            pass
 
-    # ====================== SECURITY MODERATION (sabse pehle check) ======================
+    # ====================== SECURITY MODERATION ======================
     if message.chat.type in ['group', 'supergroup'] and chat_id in security_enabled and security_enabled[chat_id]:
         text_to_check = ""
         if message.text:
             text_to_check = message.text.lower()
         elif message.caption:
             text_to_check = message.caption.lower()
+
+        if message.document and message.document.file_name:
+            if text_to_check: text_to_check += " "
+            text_to_check += message.document.file_name.lower()
+        if message.sticker and message.sticker.emoji:
+            if text_to_check: text_to_check += " "
+            text_to_check += message.sticker.emoji.lower()
+        if message.animation and getattr(message.animation, 'file_name', None):
+            if text_to_check: text_to_check += " "
+            text_to_check += message.animation.file_name.lower()
 
         if any(kw in text_to_check for kw in BLOCKED_KEYWORDS):
             user_id = message.from_user.id
@@ -310,7 +553,6 @@ def handle_all_messages(message):
             is_severe = any(kw in text_to_check for kw in SEVERE_KEYWORDS)
             reason = "Contains blocked keywords (Telegram TOS violation)"
 
-            # Try to delete message
             deleted = False
             try:
                 bot.delete_message(chat_id, message.message_id)
@@ -318,24 +560,21 @@ def handle_all_messages(message):
             except:
                 bot.send_message(chat_id, "⚠️ **MODERATION ALERT**\nBot 'Delete Messages' give the all admin rights! Please promote the bot.")
 
-            # Notify group
             notify = f"🚨 **TOS VIOLATION DETECTED!**\nMessage from {clickable} {'deleted' if deleted else 'detected'}.\nReason: {reason}"
             
             if is_severe:
                 notify += "\n**Severe violation - User muted for 24 hours!**"
                 try:
-                    until = int(time.time()) + 86400  # 24 hours
+                    until = int(time.time()) + 86400
                     bot.restrict_chat_member(chat_id, user_id, can_send_messages=False, until_date=until)
                     notify += "\nUser successfully muted."
                 except:
                     notify += "\n(Muting failed - bot needs 'Restrict Members' right)"
 
             bot.send_message(chat_id, notify, parse_mode='Markdown')
-            
-            # Bad message ke liye XP ya hangman mat do
             return
 
-    # ====================== NORMAL XP & HANGMAN (old logic) ======================
+    # ====================== NORMAL XP & HANGMAN ======================
     if message.chat.type in ['group', 'supergroup'] and not message.text.startswith('/'):
         user_id = message.from_user.id
         name = message.from_user.first_name
@@ -371,7 +610,7 @@ def handle_all_messages(message):
         conn.commit()
         conn.close()
 
-    # Hangman Logic (same as before)
+    # Hangman Logic
     if chat_id in hangman_games:
         game = hangman_games[chat_id]
         guess = message.text.strip().lower()
@@ -400,8 +639,68 @@ def handle_all_messages(message):
             bot.send_message(chat_id, f"😢 Game Over! The word was: **{game['word']}**")
             del hangman_games[chat_id]
 
+# ====================== EDITED MESSAGE HANDLER ======================
+@bot.edited_message_handler(func=lambda message: True)
+def handle_edited_messages(message):
+    chat_id = message.chat.id
+
+    if message.chat.type in ['group', 'supergroup'] and chat_id in security_enabled and security_enabled[chat_id]:
+        text_to_check = ""
+        if message.text:
+            text_to_check = message.text.lower()
+        elif message.caption:
+            text_to_check = message.caption.lower()
+
+        if message.document and message.document.file_name:
+            if text_to_check: text_to_check += " "
+            text_to_check += message.document.file_name.lower()
+        if message.sticker and message.sticker.emoji:
+            if text_to_check: text_to_check += " "
+            text_to_check += message.sticker.emoji.lower()
+        if message.animation and getattr(message.animation, 'file_name', None):
+            if text_to_check: text_to_check += " "
+            text_to_check += message.animation.file_name.lower()
+
+        if any(kw in text_to_check for kw in BLOCKED_KEYWORDS):
+            user_id = message.from_user.id
+            name = message.from_user.first_name
+            clickable = make_clickable_name(user_id, name)
+            
+            is_severe = any(kw in text_to_check for kw in SEVERE_KEYWORDS)
+            reason = "Contains blocked keywords (Telegram TOS violation)"
+
+            deleted = False
+            try:
+                bot.delete_message(chat_id, message.message_id)
+                deleted = True
+            except:
+                bot.send_message(chat_id, "⚠️ **MODERATION ALERT**\nBot 'Delete Messages' give the all admin rights! Please promote the bot.")
+
+            notify = f"🚨 **TOS VIOLATION DETECTED!**\nMessage from {clickable} {'deleted' if deleted else 'detected'}.\nReason: {reason}"
+            
+            if is_severe:
+                notify += "\n**Severe violation - User muted for 24 hours!**"
+                try:
+                    until = int(time.time()) + 86400
+                    bot.restrict_chat_member(chat_id, user_id, can_send_messages=False, until_date=until)
+                    notify += "\nUser successfully muted."
+                except:
+                    notify += "\n(Muting failed - bot needs 'Restrict Members' right)"
+
+            bot.send_message(chat_id, notify, parse_mode='Markdown')
+            return
+
 if __name__ == "__main__":
     init_db()
+    
+    conn = sqlite3.connect('ranking.db')
+    c = conn.cursor()
+    c.execute("SELECT chat_id, enabled FROM security_settings")
+    for row in c.fetchall():
+        security_enabled[row[0]] = bool(row[1])
+    conn.close()
+    
     set_bot_menu()
-    print("Bot is running... 🔥 Security feature added!")
+    print("Bot is running... 🔥 Security + Top Groups + Global Top Users")
     bot.infinity_polling()
+    
