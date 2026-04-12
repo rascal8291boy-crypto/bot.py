@@ -441,6 +441,7 @@ def show_profile(message):
         bot.reply_to(message, text, parse_mode='Markdown')
 
 # ====================== RANKINGS ======================
+@bot.message_handler(commands=['rankings'])
 def show_rankings(message):
     if message.chat.type not in ['group', 'supergroup']:
         return bot.reply_to(message, "❌ This command only works in groups!")
@@ -448,40 +449,28 @@ def show_rankings(message):
     chat_id = message.chat.id
     stats = get_message_stats(chat_id, "today")
 
-    # Header section
-    header = "<b>MANIPULATER RANKING BOT</b>\n<b>GROUP LEADERBOARD</b> 🏆\n\n"
-    footer = "\n━━━━━━━━━━━━━━━━━━━━"
-
     if not stats:
-        caption = f"{header}❌ No messages yet today!\nStart sending messages 🔥{footer}"
+        caption = "**MANIPULATER RANKING BOT**\n**GROUP LEADERBOARD** 🏆\n\n❌ No messages yet today!\nStart sending messages 🔥\n\n━━━━━━━━━━━━━━━━━━━━"
     else:
         text = ""
         for i, (user_id, name, msgs) in enumerate(stats, 1):
-            # HTML का उपयोग करके नाम को क्लिकेबल बनाना (आईडी नहीं दिखेगी)
-            # यहाँ 'name' को escape करना जरूरी है ताकि नाम में < या > होने पर कोड न फटे
-            safe_name = name.replace('<', '&lt;').replace('>', '&gt;')
-            clickable = f'<a href="tg://user?id={user_id}">{safe_name}</a>'
-            text += f"{i}. {clickable} • <code>{msgs} messages</code>\n"
-            
+            clickable = make_clickable_name(user_id, name)
+            text += f"{i}. {clickable} • `{msgs} messages`\n"
         total_msgs = sum(msgs for _, _, msgs in stats)
-        text += f"\n📊 <b>Total messages:</b> <code>{total_msgs}</code>"
-        caption = f"{header}{text}{footer}"
+        text += f"\n📊 **Total messages:** `{total_msgs}`\n━━━━━━━━━━━━━━━━━━━━"
+        caption = f"**MANIPULATER RANKING BOT**\n**GROUP LEADERBOARD** 🏆\n\n{text}"
 
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
         types.InlineKeyboardButton("📅 Today", callback_data="ranking_today"),
         types.InlineKeyboardButton("📆 Week", callback_data="ranking_lastweek"),
-        types.InlineKeyboardButton("🌍 Overall", callback_data="topgroups_overall")
-    )
+  types.InlineKeyboardButton("🌍 Overall", callback_data="topgroups_overall")
+     )
 
     try:
-        # यहाँ parse_mode='HTML' कर दिया है क्योंकि यह Markdown से बेहतर काम करता है
-        bot.send_photo(chat_id, photo=LEADERBOARD_BANNER, caption=caption, parse_mode='HTML', reply_markup=markup)
-    except Exception as e:
-        # अगर फोटो नहीं जाती तो टेक्स्ट मैसेज भेजें
-        bot.reply_to(message, caption, parse_mode='HTML')
-
-
+        bot.send_photo(chat_id, photo=LEADERBOARD_BANNER, caption=caption, parse_mode='Markdown', reply_markup=markup)
+    except:
+        bot.reply_to(message, caption, parse_mode='Markdown')
 @bot.message_handler(commands=['hangman'])
 def start_hangman(message):
     if message.chat.type not in ['group', 'supergroup']:
