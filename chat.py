@@ -8,6 +8,7 @@ import time  # mute ke liye
 from telebot import types
 from datetime import date, timedelta
 
+app = Flask(__name__)
 @app.route('/')
 def home():
     return "Bot is alive!"
