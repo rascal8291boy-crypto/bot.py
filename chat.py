@@ -5,7 +5,7 @@ import time  # mute ke liye
 from telebot import types
 from datetime import date, timedelta
 
-API_TOKEN = '8659286479:AAHP8cAK-QgkzqVUylhDc5BgRIUnn245hX8'
+API_TOKEN = '8740586204:AAHaVnVgj2WoTlk3Oqrxze13Jl4oyQk2_zc'
 bot = telebot.TeleBot(API_TOKEN)
 
 # Hangman game states
@@ -72,7 +72,7 @@ def main_menu_markup():
     markup = types.InlineKeyboardMarkup(row_width=2)
     add_btn = types.InlineKeyboardButton(text="➕ Add Me to Group", url="https://t.me/manipulator_chat_ranking_bot?startgroup=start")
     settings_btn = types.InlineKeyboardButton(text="⚙️ Settings", callback_data="open_settings")
-    owner_btn = types.InlineKeyboardButton(text="👤 Owner", url="tg://openmessage?user_id=8259919292")
+    owner_btn = types.InlineKeyboardButton(text="SUPPORT", url="https://t.me/manipulater_support")
     markup.add(add_btn)
     markup.add(settings_btn, owner_btn)
     return markup
@@ -592,8 +592,13 @@ def handle_all_messages(message):
             new_lvl = (new_xp // 100) + 1
             c.execute("UPDATE users SET xp=?, level=?, name=? WHERE user_id=?", (new_xp, new_lvl, name, user_id))
             if new_lvl > row[1]:
-                bot.send_message(chat_id, f"🎊 **{name}**, You reached **Level {new_lvl}**! 🔥")
-
+                clickable_name = f"[{name}](tg://user?id={user_id})"
+                bot.send_message(
+            chat_id, 
+            f"🎊⚡ LEVEL UP!  **{clickable_name}** reached Level {new_lvl}!\n"
+            f"🏆 Keep grinding & rule the leaderboard! 👑🔥",
+            parse_mode="Markdown"
+        )
         today_str = date.today().isoformat()
         c.execute("""INSERT INTO daily_messages (user_id, chat_id, date, message_count)
                      VALUES (?, ?, ?, 1)
@@ -701,6 +706,5 @@ if __name__ == "__main__":
     conn.close()
     
     set_bot_menu()
-    print("Bot is running... 🔥 Security + Top Groups + Global Top Users")
+    print("Bot is running... 🔥")
     bot.infinity_polling()
-    
