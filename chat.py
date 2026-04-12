@@ -1,3 +1,6 @@
+import os
+from flask import Flask
+from threading import Thread
 import telebot
 import sqlite3
 import random
@@ -5,6 +8,18 @@ import time  # mute ke liye
 from telebot import types
 from datetime import date, timedelta
 
+@app.route('/')
+def home():
+    return "Bot is alive!"
+
+def run():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+    
 API_TOKEN = '8740586204:AAHaVnVgj2WoTlk3Oqrxze13Jl4oyQk2_zc'
 bot = telebot.TeleBot(API_TOKEN)
 
@@ -707,4 +722,5 @@ if __name__ == "__main__":
     
     set_bot_menu()
     print("Bot is running... 🔥")
+    keep_alive()
     bot.infinity_polling()
