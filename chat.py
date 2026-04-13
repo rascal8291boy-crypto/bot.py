@@ -708,7 +708,7 @@ def handle_edited_messages(message):
                     notify += "\n(Muting failed - bot needs 'Restrict Members' right)"
 
             bot.send_message(chat_id, notify, parse_mode='Markdown')
-            return
+        return
 
 if __name__ == "__main__":
     init_db()
@@ -721,6 +721,11 @@ if __name__ == "__main__":
     conn.close()
     
     set_bot_menu()
-    print("Bot is running... 🔥")
-    keep_alive()
-    bot.infinity_polling()
+        print("Bot is running... 🔥")
+        keep_alive()
+
+    # ================== QUIZ SYSTEM INTEGRATION ==================
+        from quiz import setup_quiz
+        setup_quiz(bot)
+
+        bot.infinity_polling()
