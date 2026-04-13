@@ -721,11 +721,11 @@ if __name__ == "__main__":
     conn.close()
     
     set_bot_menu()
-        print("Bot is running... 🔥")
-        keep_alive()
+    print("Bot is running... 🔥")
+    keep_alive()
 
     # ================== QUIZ SYSTEM INTEGRATION ==================
-        from quiz import setup_quiz
-        setup_quiz(bot)
+    from quiz import setup_quiz
+    setup_quiz(bot)
 
-        bot.infinity_polling()
+    bot.infinity_polling()
