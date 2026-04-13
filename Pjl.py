@@ -6,7 +6,7 @@ import json
 import os
 
 # ================== YAHAN APNA DATA DAALO ==================
-TOKEN = "8659286479:AAHP8cAK-QgkzqVUylhDc5BgRIUnn245hX8"          # BotFather se liya hua token
+TOKEN = "8740586204:AAHaVnVgj2WoTlk3Oqrxze13Jl4oyQk2_zc"          # BotFather se liya hua token
 
 # Owner ka Telegram User ID (zaruri hai)
 # @userinfobot ko message bhejo aur apna ID yahan daal do
