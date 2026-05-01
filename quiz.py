@@ -33,6 +33,7 @@
         <p id="timer">OTP expires in: <span id="seconds">60</span>s</p>
         <input type="text" id="otpInput" maxlength="6" placeholder="6-digit OTP">
         <button onclick="verifyOTP()">Verify OTP</button>
+<button onclick="resendOTP()" style="background:#007bff; margin-top:10px;">Resend OTP</button>
     </div>
 
     <!-- Step 3: Name Entry -->
@@ -87,6 +88,31 @@
                 location.reload();
             }
         }, 1000);
+    }
+    function resendOTP() {
+    const phone = document.getElementById('phone').value;
+
+    if (!phone || phone.length < 10) {
+        return alert("Pehle valid number daalo");
+    }
+        
+    // 🔒 Duplicate account check
+    let users = JSON.parse(localStorage.getItem("users")) || [];
+
+    let exists = users.find(user => user.phone === phone);
+
+    if (exists) {
+    return alert("Is number se account pehle se bana hua hai!");
+    }    
+
+    // Naya OTP generate karo
+    generatedOTP = Math.floor(100000 + Math.random() * 900000);
+
+    alert("Naya OTP hai: " + generatedOTP);
+
+    // Timer reset karo
+    clearInterval(timerInterval);
+    startTimer();
     }
 
     function verifyOTP() {
